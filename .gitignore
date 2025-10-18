@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Virtualenvs
+venv/
+
+# IDE/OS
+.vscode/
+.idea/
+.DS_Store
+
+
+# Data / Large
+schrott/
+
+# Jupyter (falls vorhanden)
+.ipynb_checkpoints/

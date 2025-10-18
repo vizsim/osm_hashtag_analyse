@@ -1,0 +1,11 @@
+{
+    "timestamp": "2025-10-16T09:20:43.450654",
+    "status": 440,
+    "message": "Keyboard Interrupt: Query was interrupted by the user.",
+    "requestUrl": "https://api.ohsome.org/v1/elements/count",
+    "parameters": {
+        "bboxes": "13.08835,52.33826,13.76116,52.67551",
+        "time": "2025-01-01",
+        "filter": "building=*"
+    }
+}
