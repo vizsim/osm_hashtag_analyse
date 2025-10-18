@@ -17,6 +17,10 @@ venv/
 
 # Data / Large
 schrott/
+ohsome_log/
 
 # Jupyter (falls vorhanden)
 .ipynb_checkpoints/
+
+
+*.png
