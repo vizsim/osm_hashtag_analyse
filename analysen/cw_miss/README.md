@@ -62,20 +62,15 @@ Untersucht wird die Entwicklung von **Source-Tags → Target-Tags**.
 
 ### Sankey-Diagramm
 
-- **Targets (rechts)**  
-  stellen explizite Radinfrastruktur dar, die es zuvor in dieser Form noch nicht gab.
+Die Pfeile zeigen, wie Straßen-Tags in Radinfrastruktur-Tags umgewandelt wurden:
 
-- **Source = `Added`**  
-  bedeutet, dass die Infrastruktur neu hinzugefügt wurde.
+- **Targets (rechts):** Alle Wege nach der Änderung mit expliziter Radinfrastruktur-Tagung (z.B. `cycleway=track`)
 
-- **Andere Sources**  
-  stehen für bestehende Wege, die durch Tag-Anpassungen ergänzt oder präzisiert wurden.
+- **`Added` (von links):** Komplett neu hinzugefügte Wege als Radinfrastruktur
 
-- **`(other)` auf der linken Seite**  
-  bedeutet, dass zuvor keine eindeutig erkennbare Radinfrastruktur getaggt war.  
-  Häufig fehlten entweder  
-  `bicycle=yes` oder `bicycle=designated` auf separaten Wegen  
-  oder ein `cycleway`-Tag.
+- **Andere Sources (von links):** Bestehende Wege, deren Radinfrastruktur-Tags präzisiert wurden (z.B. `bicycle=yes` → `cycleway=designated`)
+
+- **`(other)` (von links):** Wege ohne klare Radinfrastruktur-Tagung zuvor – typischerweise fehlte `cycleway=*`, `bicycle=yes` oder `bicycle=designated`
 
 ---
 
@@ -85,10 +80,10 @@ GitHub READMEs unterstützen keine interaktiven Plotly-Diagramme direkt.
 Die interaktiven Visualisierungen werden daher über **GitHub Pages** bereitgestellt.
 
 - **Interaktives Sankey-Diagramm:**  
-  https://vizsim.github.io/osm_hashtag_analyse/cw_miss/sankey.html
+  https://vizsim.github.io/osm_hashtag_analyse/analysen/cw_miss/sankey.html
 
 - **Interaktive Karte:**  
-  https://vizsim.github.io/osm_hashtag_analyse/cw_miss/gdf_categories_v2.html
+  https://vizsim.github.io/osm_hashtag_analyse/analysen/cw_miss/gdf_categories_v2.html
 
 
 ---
