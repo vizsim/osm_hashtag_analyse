@@ -56,7 +56,7 @@ Untersucht wird die Entwicklung von **Source-Tags → Target-Tags**.
 
 ---
 
-![alt text](newplot.png)
+![alt text](sankey.png)
 
 ## Interpretation der Visualisierungen
 

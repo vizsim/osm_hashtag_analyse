@@ -25,3 +25,6 @@ ohsome_log/
 
 
 *.png
+!newplot.png
+
+config.json
