@@ -33,9 +33,9 @@ Benötigte Tools und Bibliotheken:
 
 ## 1. Daten herunterladen
 
-### 1.1 OSM-History (PBF)
+### 1.1 OSM-History (.osh.pbf) 
 
-Lade die vollständige OSM-History-Datei (PBF) herunter.  
+Lade die vollständige OSM-History-Datei (.osh.pbf) herunter.  
 Für Deutschland (interner Download, ~10 GB):
 
 <https://osm-internal.download.geofabrik.de/europe/germany.html>
@@ -56,80 +56,87 @@ Mit osmium können Changesets auf Zeiträume und Regionen eingeschränkt werden.
 
 Beispiel für Deutschland (BBox):
 
-(⚠️ Dauer: ca. 15 Minuten – abhängig von Hardware und Datengröße.)
+( Dauer: ⏱️ ca. 15 Minuten – abhängig von Hardware und Datengröße.)
 
 ```bash
 DE_BBOX="5.5,47.2,15.1,55.1"
 
 osmium changeset-filter \
-  --after 2020-01-01T00:00:00Z \
+  --after 2025-01-01T00:00:00Z \
   --bbox $DE_BBOX \
-  -o changesets-DE-2020plus.osm.bz2 \
-  changesets-latest.osm.bz2
+  -o changesets-DE-2025plus251201.osm.bz2 \
+  changesets-251201.osm.bz2 
 ```
 
 ---
 
 ## 3. Changeset-Datenbank einrichten und befüllen
 
-Zur Verarbeitung wird ChangesetMD verwendet: <https://github.com/ToeBee/ChangesetMD>
+Zur Verarbeitung wird **ChangesetMD** verwendet:  
+https://github.com/ToeBee/ChangesetMD
 
-### 3.1 Datenbank anlegen
+---
 
-Erstelle eine PostgreSQL-Datenbank, z. B.:
-
-```bash
-createdb -U osm changesetmd
-```
-
-### 3.2 Tabellenstruktur anlegen
-
-Im ChangesetMD-Verzeichnis:
+### 3.1 In ChangesetMD wechseln und Python-Umgebung vorbereiten
 
 ```bash
 cd ~/ChangesetMD
+```
+
+**Wenn die virtuelle Umgebung bereits existiert:**
+
+```bash
+source .venv/bin/activate
+```
+
+**Falls sie noch nicht existiert:**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install \
+  bz2file==0.98 \
+  lxml==6.0.2 \
+  psycopg2-binary==2.9.11 \
+  PyYAML==6.0.3
+```
+
+---
+
+### 3.2 PostgreSQL-Datenbank anlegen
+
+```bash
+createdb -U osm -h localhost -W ch_2025_12
+```
+
+---
+
+### 3.3 Tabellenstruktur anlegen
+
+```bash
 python3 changesetmd.py \
   -c \
   -H localhost \
   -u osm \
   -p osm \
-  -d ch
+  -d ch_2025_12
 ```
 
-### 3.3 Changeset-Datei entpacken
+---
 
-TODO: ggf. geht das auch ohne, wenn man noch ein zusätzliches Paket installiert (?)
+### 3.4 Changeset-Daten importieren
 
-```bash
-bunzip2 -k ~/ohsome-planet/data/changesets-DE-2020plus.osm.bz2
-```
-
-### 3.4 Daten in die Datenbank importieren
-
-Dauer: ca. 50 Minuten.
+Direkter Import der `.osm.bz2`-Datei  
+(kein vorheriges Entpacken nötig, Deutschland 01.01.2025–01.12.2025 ⏱️ ca. 10 Minuten)
 
 ```bash
 python3 changesetmd.py \
-  -f ~/ohsome-planet/data/changesets-DE-2020plus.osm \
+  -f ~/ohsome-planet/data/changesets-DE-2025plus251201.osm.bz2 \
   -H localhost \
   -u osm \
   -p osm \
-  -d changesetmd
+  -d ch_2025_12
 ```
-
-### 3.5 Alternative Verarbeitung (experimentell)
-
-Als Alternative zur ChangesetMD-basierten Variante kann osmchangesets2csv verwendet werden:
-
-```bash
-cargo install osmchangesets2csv
-```
-
-```bash
-osmchangesets2csv -i changesets-DE-2020plus.osm.bz2 -o changesets-DE-2020plus.csv
-```
-
-⚠️ Hinweis: Diese Methode ist vermutlich schneller; der saubere Import in die DB funktioniert jedoch noch nicht zuverlässig.
 
 ---
 
@@ -137,23 +144,26 @@ osmchangesets2csv -i changesets-DE-2020plus.osm.bz2 -o changesets-DE-2020plus.cs
 
 Nun können die OSM-History-Daten (.osh.pbf) und die Changesets in Parquet-Dateien zusammengeführt werden.
 
+**Hinweis:** Mit `--include-tags=foobar123` werden alle Relations ausgeschlossen (da nicht benötigt). Die Verarbeitung dauert ⏱️ ca. 1 Stunde.
+
 Beispiel:
 
 ```bash
 HISTORY=~/ohsome-planet/data/germany-internal.osh.pbf
-OUTDIR=~/ohsome-planet/out-germany_cs
+OUTDIR=~/ohsome-planet/out-germany_cs_251201
 
 java -Xmx16g -jar ~/ohsome-planet/ohsome-planet-cli/target/ohsome-planet.jar contributions \
   --pbf "$HISTORY" \
-  --changeset-db "jdbc:postgresql://localhost:5432/changesetmd?user=osm&password=osm" \
+  --changeset-db "jdbc:postgresql://localhost:5432/ch_2025_12?user=osm&password=osm" \
   --output "$OUTDIR" \
+  --include-tags=foobar123 \
   --overwrite
-```
-
-💡 Optional: Falls nur bestimmte OSM-Objekttypen (z. B. nur ways) berücksichtigt werden sollen, können zusätzliche Parameter genutzt werden (aktuell noch TODO).
+```  
 
 ---
 
 ## 5. Ergebnis
 
 Im angegebenen Output-Verzeichnis (OUTDIR) liegen anschließend Parquet-Dateien vor, die sowohl OSM-History- als auch Changeset-Informationen enthalten – ideal für Analysen z. B. mit Spark, DuckDB oder Pandas.
+
+Diese Parquet-Dateien werden anschließend im `analysen`-Folder für weitere Datenanalysen und Visualisierungen genutzt.
