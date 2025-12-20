@@ -25,6 +25,6 @@ ohsome_log/
 
 
 *.png
-!newplot.png
+!sankey.png
 
 config.json
