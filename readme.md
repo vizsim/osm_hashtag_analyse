@@ -4,6 +4,20 @@ Diese Anleitung beschreibt den Workflow, um mit ohsome-planet eine Datenbank aus
 
 ---
 
+## 📑 Inhaltsverzeichnis
+
+* [Disclaimer](#-disclaimer)
+* [Voraussetzungen](#-voraussetzungen)
+1. [Daten herunterladen](#1-daten-herunterladen)
+2. [Changesets verarbeiten](#2-changesets-verarbeiten)
+3. [Changeset-Datenbank einrichten und befüllen](#3-changeset-datenbank-einrichten-und-befüllen)
+4. [Kombination von OSM-History und Changesets](#4-kombination-von-osm-history-und-changesets-ohsome-planet-inkl-replikation)
+5. [Ergebnis](#5-ergebnis)
+* [Troubleshooting & Tipps](#-troubleshooting--tipps)
+* [Weiterführende Links](#-weiterführende-links)
+
+---
+
 ## ⚠️ Disclaimer
 
 Die Anleitung ist nicht vollständig, zeigt aber das grundsätzliche Vorgehen und die wichtigsten Schritte. Systemabhängigkeiten (z. B. osmium, PostgreSQL, Java) müssen vorab manuell installiert werden.
@@ -17,16 +31,12 @@ Benötigte Tools und Bibliotheken:
 - osmium-tool  
   → zum Filtern und Verarbeiten von OSM-Changesets  
   Installation:
-
-  ```bash
-  sudo apt install osmium-tool
-  ```
-
+  ```sudo apt install osmium-tool```
 - PostgreSQL (z. B. lokal)
-
+- Docker (für einfache DB-Einrichtung)
 - Java 17+
 
-- ohsome-planet  
+- ohsome-planet  (v 1.2.0)
   → lokal klonen und bauen (siehe Repository: <https://github.com/GIScience/ohsome-planet>)
 
 ---
@@ -64,106 +74,96 @@ DE_BBOX="5.5,47.2,15.1,55.1"
 osmium changeset-filter \
   --after 2025-01-01T00:00:00Z \
   --bbox $DE_BBOX \
-  -o changesets-DE-2025plus251201.osm.bz2 \
-  changesets-251201.osm.bz2 
+  -o changesets-DE-2025plus260126.osm.bz2 \
+  changesets-260126.osm.bz2 
 ```
 
 ---
 
-## 3. Changeset-Datenbank einrichten und befüllen
+## 3. Changeset-Datenbank einrichten und befüllen (NEU seit 1.2.0)
 
-Zur Verarbeitung wird **ChangesetMD** verwendet:  
-https://github.com/ToeBee/ChangesetMD
-
----
-
-### 3.1 In ChangesetMD wechseln und Python-Umgebung vorbereiten
+### 3.1 PostgreSQL-Datenbank anlegen (mit Docker)
 
 ```bash
-cd ~/ChangesetMD
-```
+export OHSOME_PLANET_DB_USER=ohsomedb
+export OHSOME_PLANET_DB_PASSWORD=mysecretpassword
 
-**Wenn die virtuelle Umgebung bereits existiert:**
-
-```bash
-source .venv/bin/activate
-```
-
-**Falls sie noch nicht existiert:**
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install \
-  bz2file==0.98 \
-  lxml==6.0.2 \
-  psycopg2-binary==2.9.11 \
-  PyYAML==6.0.3
+ docker run -d \
+  --name ohsome_planet_changeset_db \
+  -e POSTGRES_PASSWORD=$OHSOME_PLANET_DB_PASSWORD \
+  -e POSTGRES_USER=$OHSOME_PLANET_DB_USER \
+  -p 5433:5432 \
+  postgis/postgis
 ```
 
 ---
 
-### 3.2 PostgreSQL-Datenbank anlegen
-
-```bash
-createdb -U osm -h localhost -W ch_2025_12
-```
-
----
-
-### 3.3 Tabellenstruktur anlegen
-
-```bash
-python3 changesetmd.py \
-  -c \
-  -H localhost \
-  -u osm \
-  -p osm \
-  -d ch_2025_12
-```
-
----
-
-### 3.4 Changeset-Daten importieren
+### 3.2 Changeset-Daten importieren
 
 Direkter Import der `.osm.bz2`-Datei  
-(kein vorheriges Entpacken nötig, Deutschland 01.01.2025–01.12.2025 ⏱️ ca. 10 Minuten)
+(kein vorheriges Entpacken nötig, Deutschland 01.01.2025– ⏱️ ca. 5 Minuten)
 
 ```bash
-python3 changesetmd.py \
-  -f ~/ohsome-planet/data/changesets-DE-2025plus251201.osm.bz2 \
-  -H localhost \
-  -u osm \
-  -p osm \
-  -d ch_2025_12
+java -jar ohsome-planet-cli/target/ohsome-planet.jar \
+  changesets \
+  --bz2 data/changesets-DE-2025plus260126.osm.bz2 \
+  --changeset-db "jdbc:postgresql://localhost:5433/postgres?user=$OHSOME_PLANET_DB_USER&password=$OHSOME_PLANET_DB_PASSWORD" \
+  --create-tables \
+  --overwrite
 ```
 
 ---
 
-## 4. Kombination von OSM-History und Changesets (ohsome-planet)
+## 4. Kombination von OSM-History und Changesets (ohsome-planet) inkl. Replikation
 
-Nun können die OSM-History-Daten (.osh.pbf) und die Changesets in Parquet-Dateien zusammengeführt werden.
+Nun können die OSM-History-Daten (.osh.pbf) und die Changesets in Parquet-Dateien zusammengeführt und die Replikation vorbereitet werden.
+
+Für den Download aus dem internen Geofabrik-Bereich ist eine automatisierte Authentifizierung erforderlich ([OAuth-API](https://github.com/geofabrik/sendfile_osm_oauth_protector/blob/master/doc/client.md)).
+
 
 **Hinweis:** Mit `--include-tags=foobar123` werden alle Relations ausgeschlossen (da nicht benötigt). Die Verarbeitung dauert ⏱️ ca. 1 Stunde.
 
-Beispiel:
+Initiale Erstellung:
+```bash
+export OHSOME_PLANET_DB_USER=ohsomedb
+export OHSOME_PLANET_DB_PASSWORD=mysecretpassword
+export OHSOME_PLANET_DB_SCHEMA=public
+export OHSOME_PLANET_DB_POOLSIZE=100
+
+export OSM_REPLICATION_ENDPOINT_COOKIE="$(cut -d';' -f1 ~/sendfile_osm_oauth_protector/cookie.txt)"
+
+java -jar ohsome-planet-cli/target/ohsome-planet.jar contributions \
+  --data ~/ohsome-planet/data/germany_from2025_rep \
+  --pbf  ~/ohsome-planet/data/germany-internal.osh.pbf \
+  --filter-relation-tag-keys=foobar123 \
+  --changeset-db "jdbc:postgresql://localhost:5433/postgres?user=$OHSOME_PLANET_DB_USER&password=$OHSOME_PLANET_DB_PASSWORD" \
+  --replication-endpoint "https://osm-internal.download.geofabrik.de/europe/germany-updates"
+```  
+Replikation:
 
 ```bash
-HISTORY=~/ohsome-planet/data/germany-internal.osh.pbf
-OUTDIR=~/ohsome-planet/out-germany_cs_251201
-
-java -Xmx16g -jar ~/ohsome-planet/ohsome-planet-cli/target/ohsome-planet.jar contributions \
-  --pbf "$HISTORY" \
-  --changeset-db "jdbc:postgresql://localhost:5432/ch_2025_12?user=osm&password=osm" \
-  --output "$OUTDIR" \
-  --include-tags=foobar123 \
-  --overwrite
-```  
-
+java -jar ohsome-planet-cli/target/ohsome-planet.jar replications \
+  --data ~/ohsome-planet/data/germany_from2025_rep \
+  --changeset-db "jdbc:postgresql://localhost:5433/postgres?user=$OHSOME_PLANET_DB_USER&password=$OHSOME_PLANET_DB_PASSWORD" \
+  -v
+```
 ---
+
 
 ## 5. Ergebnis
 
-Im angegebenen Output-Verzeichnis (OUTDIR) liegen anschließend Parquet-Dateien vor, die sowohl OSM-History- als auch Changeset-Informationen enthalten – ideal für Analysen z. B. mit Spark, DuckDB oder Pandas.
+Im angegebenen Output-Verzeichnis (`--data`) liegen anschließend Parquet-Dateien vor, die sowohl OSM-History- als auch Changeset-Informationen enthalten – ideal für Analysen z. B. mit Spark, DuckDB oder Pandas.
 
-Diese Parquet-Dateien werden anschließend im `analysen`-Folder für weitere Datenanalysen und Visualisierungen genutzt.
+Diese Parquet-Dateien werden anschließend im `analysen`-Ordner für weitere Datenanalysen und Visualisierungen genutzt.
+
+---
+
+---
+
+## 🔗 Weiterführende Links
+
+- [ohsome-planet Doku](https://github.com/GIScience/ohsome-planet)
+- [osmium-tool](https://osmcode.org/osmium-tool/)
+- [DuckDB](https://duckdb.org/)
+- [Parquet-Format](https://parquet.apache.org/)
+- [Geofabrik OSM-Downloads](https://download.geofabrik.de/)
