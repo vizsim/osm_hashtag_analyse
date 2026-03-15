@@ -78,6 +78,20 @@ osmium changeset-filter \
   changesets-260126.osm.bz2 
 ```
 
+> **⚠️ Hinweis – möglicher Bug bei großen Dateien (ungetestet):**  
+> `osmium changeset-filter` erzeugt standardmäßig einen einzelnen bzip2-Block. Bei großen Dateien kann das zu einem `Required array size too large`-Fehler beim Import führen ([ohsome-planet#33](https://github.com/GIScience/ohsome-planet/issues/33), [#1](https://github.com/vizsim/osm_hashtag_analyse/issues/1)).  
+> Als Workaround kann stattdessen `pbzip2` verwendet werden, das mehrere kleine Blöcke erzeugt und zusätzlich schneller ist:
+>
+> ```bash
+> osmium changeset-filter \
+>   --after 2025-01-01T00:00:00Z \
+>   --bbox $DE_BBOX \
+>   --output-format xml \
+>   changesets-260126.osm.bz2 | pbzip2 > changesets-DE-2025plus260126.osm.bz2
+> ```
+>
+> Dieser Ansatz wird auch im [offiziellen ohsome-planet Tutorial](https://github.com/GIScience/ohsome-planet/blob/main/docs/tutorial.md#ii-enriche-parquet-files-with-changeset-information) beschrieben. Der anschließende Import in Schritt 3.2 sollte damit sogar schneller sein – die dort angegebene Zeit von ~5 Minuten könnte sich verkürzen.
+
 ---
 
 ## 3. Changeset-Datenbank einrichten und befüllen (NEU seit 1.2.0)
