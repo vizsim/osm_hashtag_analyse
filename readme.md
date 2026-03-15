@@ -107,7 +107,7 @@ Direkter Import der `.osm.bz2`-Datei
 java -jar ohsome-planet-cli/target/ohsome-planet.jar \
   changesets \
   --bz2 data/changesets-DE-2025plus260126.osm.bz2 \
-  --changeset-db "jdbc:postgresql://localhost:5433/postgres?user=$OHSOME_PLANET_DB_USER&password=$OHSOME_PLANET_DB_PASSWORD" \
+  --changeset-db "jdbc:postgresql://localhost:5433/postgres" \
   --create-tables \
   --overwrite
 ```
@@ -120,35 +120,65 @@ Nun können die OSM-History-Daten (.osh.pbf) und die Changesets in Parquet-Datei
 
 Für den Download aus dem internen Geofabrik-Bereich ist eine automatisierte Authentifizierung erforderlich ([OAuth-API](https://github.com/geofabrik/sendfile_osm_oauth_protector/blob/master/doc/client.md)).
 
+Der OAuth-Client benötigt eine lokale Konfigurationsdatei mit den OpenStreetMap-Zugangsdaten.
+Diese wird einmalig unter ~/.geofabrik.json angelegt:
+
+```JSON
+{
+  "user": "DEIN_OSM_USERNAME",
+  "password": "DEIN_OSM_PASSWORT",
+  "osm_host": "https://www.openstreetmap.org",
+  "consumer_url": "https://osm-internal.download.geofabrik.de/get_cookie"
+}
+```
 
 **Hinweis:** Mit `--include-tags=foobar123` werden alle Relations ausgeschlossen (da nicht benötigt). Die Verarbeitung dauert ⏱️ ca. 1 Stunde.
 
 Initiale Erstellung:
+
 ```bash
 export OHSOME_PLANET_DB_USER=ohsomedb
 export OHSOME_PLANET_DB_PASSWORD=mysecretpassword
 export OHSOME_PLANET_DB_SCHEMA=public
-export OHSOME_PLANET_DB_POOLSIZE=100
+export OHSOME_PLANET_DB_POOLSIZE=10
 
-export OSM_REPLICATION_ENDPOINT_COOKIE="$(cut -d';' -f1 ~/sendfile_osm_oauth_protector/cookie.txt)"
+export OSM_REPLICATION_ENDPOINT_COOKIE="$(
+~/sendfile_osm_oauth_protector/oauth_cookie_client.py \
+  -s ~/.geofabrik.json \
+  -f http \
+  -o -
+)"
 
 java -jar ohsome-planet-cli/target/ohsome-planet.jar contributions \
   --data ~/ohsome-planet/data/germany_from2025_rep \
   --pbf  ~/ohsome-planet/data/germany-internal.osh.pbf \
   --filter-relation-tag-keys=foobar123 \
-  --changeset-db "jdbc:postgresql://localhost:5433/postgres?user=$OHSOME_PLANET_DB_USER&password=$OHSOME_PLANET_DB_PASSWORD" \
+  --changeset-db "jdbc:postgresql://localhost:5433/postgres" \
   --replication-endpoint "https://osm-internal.download.geofabrik.de/europe/germany-updates"
 ```  
+
 Replikation:
 
 ```bash
+export OHSOME_PLANET_DB_USER=ohsomedb
+export OHSOME_PLANET_DB_PASSWORD=mysecretpassword
+export OHSOME_PLANET_DB_SCHEMA=public
+export OHSOME_PLANET_DB_POOLSIZE=10
+
+export OSM_REPLICATION_ENDPOINT_COOKIE="$(
+~/sendfile_osm_oauth_protector/oauth_cookie_client.py \
+  -s ~/.geofabrik.json \
+  -f http \
+  -o -
+)"
+
 java -jar ohsome-planet-cli/target/ohsome-planet.jar replications \
   --data ~/ohsome-planet/data/germany_from2025_rep \
-  --changeset-db "jdbc:postgresql://localhost:5433/postgres?user=$OHSOME_PLANET_DB_USER&password=$OHSOME_PLANET_DB_PASSWORD" \
+  --changeset-db "jdbc:postgresql://localhost:5433/postgres" \
   -v
 ```
----
 
+---
 
 ## 5. Ergebnis
 
