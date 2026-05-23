@@ -203,13 +203,51 @@ body {
     color: #fffaf2;
 }
 
-.sankey-panel {
+.view-tabs {
+    display: inline-flex;
+    align-self: flex-start;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.5);
+    gap: 2px;
+}
+
+.view-tab {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font: inherit;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease;
+}
+
+.view-tab.is-active {
+    background: rgba(32, 25, 19, 0.9);
+    color: #fffaf2;
+}
+
+.chart-panel {
     flex: 0 0 auto;
     min-height: clamp(620px, 78vh, 1100px);
     border-radius: 18px;
     border: 1px solid var(--border);
     background: linear-gradient(180deg, rgba(248, 243, 235, 0.95), rgba(255, 255, 255, 0.92));
     overflow: hidden;
+}
+
+.chart-panel.is-hidden {
+    display: none;
+}
+
+.timeline-panel {
+    min-height: clamp(420px, 60vh, 720px);
+    padding: 8px 4px 4px;
 }
 
 .legend-item {
@@ -391,8 +429,12 @@ body {
         overflow: auto;
     }
 
-    .sankey-panel {
+    .chart-panel {
         min-height: 520px;
+    }
+
+    .timeline-panel {
+        min-height: 360px;
     }
 
     #map {

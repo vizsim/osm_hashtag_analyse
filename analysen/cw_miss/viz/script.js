@@ -1,8 +1,12 @@
 import { appConfig, mapPaint, sourceColorPalette, specialCategoryColors, targetColorPalette } from './config.js';
 import { addLayerIfMissing, addSourceIfMissing, hasLayer, removeLayerIfExists, removeSourceIfExists } from './map/mapSafeOps.js';
+import { renderTimeChart, monthRangeBoundsUtc } from './charts/timeChart.js';
 
 const mapContainer = document.getElementById('map');
 const sankeyContainer = document.getElementById('sankey');
+const timelineContainer = document.getElementById('timeline');
+const tabSankeyButton = document.getElementById('tab-sankey');
+const tabTimelineButton = document.getElementById('tab-timeline');
 const selectionLabel = document.getElementById('selection-label');
 const selectionMeta = document.getElementById('selection-meta');
 const selectionHint = document.getElementById('selection-hint');
@@ -17,15 +21,17 @@ const dataVintage = document.getElementById('data-vintage');
 const state = {
     map: null,
     sankeyRows: [],
-    transitionsGeojson: null,
-    transitionPointsGeojson: null,
+    transitionsIndex: [],
     selection: { type: 'none', source: null, target: null },
     hasSeenSelection: false,
     colorMode: 'target',
+    activeView: 'sankey',
     colorBySource: {},
     colorByTarget: {},
     sankeyModel: null,
-    hoveredFeatureId: null
+    hoveredFeatureId: null,
+    timelineDirty: true,
+    transientHighlight: null
 };
 
 init().catch((error) => {
@@ -35,14 +41,15 @@ init().catch((error) => {
 });
 
 async function init() {
-    const [sankeyRows, transitionsGeojson] = await Promise.all([
+    registerPmtilesProtocol();
+
+    const [sankeyRows, transitionsIndex] = await Promise.all([
         fetchJson(appConfig.sankeyDataUrl),
-        fetchJson(appConfig.transitionsDataUrl)
+        fetchJson(appConfig.transitionsIndexUrl)
     ]);
 
     state.sankeyRows = sankeyRows;
-    state.transitionsGeojson = normalizeTransitionsGeojson(transitionsGeojson);
-    state.transitionPointsGeojson = buildTransitionPointGeojson(state.transitionsGeojson);
+    state.transitionsIndex = transitionsIndex;
     state.colorBySource = createCategoryColorLookup(getUniqueValues(sankeyRows, 'source'), sourceColorPalette, specialCategoryColors);
     state.colorByTarget = createCategoryColorLookup(getUniqueValues(sankeyRows, 'target'), targetColorPalette);
     state.sankeyModel = buildSankeyModel(sankeyRows);
@@ -51,7 +58,7 @@ async function init() {
 
     renderSankey();
     initializeMap();
-    updateSelection({ type: 'none', source: null, target: null }, { fitSelection: false });
+    updateSelection({ type: 'none', source: null, target: null });
 
     resetButton.addEventListener('click', () => {
         clearHoverState();
@@ -65,6 +72,22 @@ async function init() {
     colorModeSourceButton.addEventListener('click', () => {
         updateColorMode('source');
     });
+
+    tabSankeyButton.addEventListener('click', () => {
+        setActiveView('sankey');
+    });
+
+    tabTimelineButton.addEventListener('click', () => {
+        setActiveView('timeline');
+    });
+}
+
+function registerPmtilesProtocol() {
+    if (typeof pmtiles === 'undefined' || typeof maplibregl === 'undefined') return;
+    if (registerPmtilesProtocol.done) return;
+    const protocol = new pmtiles.Protocol();
+    maplibregl.addProtocol('pmtiles', protocol.tile);
+    registerPmtilesProtocol.done = true;
 }
 
 async function fetchJson(url) {
@@ -75,119 +98,10 @@ async function fetchJson(url) {
     return response.json();
 }
 
-function normalizeTransitionsGeojson(geojson) {
-    const features = Array.isArray(geojson?.features) ? geojson.features : [];
-    for (const feature of features) {
-        const props = feature.properties ?? {};
-        if (!props.feature_id) {
-            props.feature_id = `${props.osm_id ?? 'unknown'}_${props.osm_version ?? '0'}`;
-        }
-        if (typeof props.length_km !== 'number') {
-            props.length_km = Number(props.length_km ?? 0);
-        }
-        feature.properties = props;
-    }
-    return { ...geojson, features };
-}
-
-function buildTransitionPointGeojson(geojson) {
-    const pointFeatures = geojson.features
-        .map((feature) => createPointFeature(feature))
-        .filter(Boolean);
-
-    return {
-        type: 'FeatureCollection',
-        features: pointFeatures
-    };
-}
-
-function createPointFeature(feature) {
-    const coordinate = getRepresentativeCoordinate(feature.geometry);
-    if (!coordinate) return null;
-
-    return {
-        type: 'Feature',
-        geometry: {
-            type: 'Point',
-            coordinates: coordinate
-        },
-        properties: { ...(feature.properties ?? {}) }
-    };
-}
-
-function getRepresentativeCoordinate(geometry) {
-    if (!geometry) return null;
-
-    if (geometry.type === 'LineString') {
-        return getLineMidpoint(geometry.coordinates);
-    }
-
-    if (geometry.type === 'MultiLineString') {
-        const longestLine = geometry.coordinates.reduce((longest, current) => {
-            return getCoordinatePathLength(current) > getCoordinatePathLength(longest) ? current : longest;
-        }, geometry.coordinates[0] ?? []);
-        return longestLine.length ? getLineMidpoint(longestLine) : null;
-    }
-
-    if (geometry.type === 'Point') {
-        return geometry.coordinates;
-    }
-
-    if (geometry.type === 'MultiPoint') {
-        return geometry.coordinates[0] ?? null;
-    }
-
-    return null;
-}
-
-function getLineMidpoint(coordinates) {
-    if (!Array.isArray(coordinates) || coordinates.length === 0) return null;
-    if (coordinates.length === 1) return coordinates[0];
-
-    const totalLength = getCoordinatePathLength(coordinates);
-    if (totalLength === 0) {
-        return coordinates[Math.floor(coordinates.length / 2)];
-    }
-
-    const halfLength = totalLength / 2;
-    let traversed = 0;
-
-    for (let index = 1; index < coordinates.length; index += 1) {
-        const start = coordinates[index - 1];
-        const end = coordinates[index];
-        const segmentLength = getSegmentLength(start, end);
-        if (traversed + segmentLength >= halfLength) {
-            const remaining = halfLength - traversed;
-            const ratio = segmentLength === 0 ? 0 : remaining / segmentLength;
-            return [
-                start[0] + (end[0] - start[0]) * ratio,
-                start[1] + (end[1] - start[1]) * ratio
-            ];
-        }
-        traversed += segmentLength;
-    }
-
-    return coordinates[coordinates.length - 1];
-}
-
-function getCoordinatePathLength(coordinates) {
-    let length = 0;
-    for (let index = 1; index < coordinates.length; index += 1) {
-        length += getSegmentLength(coordinates[index - 1], coordinates[index]);
-    }
-    return length;
-}
-
-function getSegmentLength(start, end) {
-    const deltaX = Number(end?.[0] ?? 0) - Number(start?.[0] ?? 0);
-    const deltaY = Number(end?.[1] ?? 0) - Number(start?.[1] ?? 0);
-    return Math.hypot(deltaX, deltaY);
-}
-
 function updateDataVintage() {
     if (!dataVintage) return;
 
-    const latestDate = getLatestValidFrom(state.transitionsGeojson?.features ?? []);
+    const latestDate = getLatestValidFrom(state.transitionsIndex);
     if (!latestDate) {
         dataVintage.textContent = '';
         return;
@@ -196,11 +110,11 @@ function updateDataVintage() {
     dataVintage.textContent = `Datenstand: ${formatDateOnly(latestDate)}`;
 }
 
-function getLatestValidFrom(features) {
+function getLatestValidFrom(rows) {
     let latestTimestamp = null;
 
-    for (const feature of features) {
-        const rawValue = feature?.properties?.valid_from;
+    for (const row of rows) {
+        const rawValue = row?.valid_from;
         if (!rawValue) continue;
 
         const date = new Date(rawValue);
@@ -365,6 +279,66 @@ function handleSankeyClick(event, sankeyModel) {
     }
 }
 
+function setActiveView(view) {
+    if (state.activeView === view) return;
+    state.activeView = view;
+
+    const sankeyActive = view === 'sankey';
+    tabSankeyButton.classList.toggle('is-active', sankeyActive);
+    tabSankeyButton.setAttribute('aria-selected', String(sankeyActive));
+    tabTimelineButton.classList.toggle('is-active', !sankeyActive);
+    tabTimelineButton.setAttribute('aria-selected', String(!sankeyActive));
+
+    sankeyContainer.classList.toggle('is-hidden', !sankeyActive);
+    sankeyContainer.hidden = !sankeyActive;
+    timelineContainer.classList.toggle('is-hidden', sankeyActive);
+    timelineContainer.hidden = sankeyActive;
+
+    if (!sankeyActive) {
+        ensureTimelineRendered();
+    } else {
+        // Plotly braucht nach Sichtbarkeitswechsel ein resize, sonst bleibt das Sankey
+        // ggf. auf der vorigen Containerbreite haengen.
+        Plotly.Plots.resize(sankeyContainer);
+        // Sichergehen: ein hover-Highlight im Time-Chart darf nicht ueberleben,
+        // wenn das Chart unsichtbar wird.
+        handleTimelineUnhover();
+    }
+}
+
+function ensureTimelineRendered() {
+    if (!timelineContainer) return;
+    renderTimeChart(timelineContainer, state.transitionsIndex, {
+        colorMode: state.colorMode,
+        colorBySource: state.colorBySource,
+        colorByTarget: state.colorByTarget,
+        formatCategoryLabel,
+        onHover: handleTimelineHover,
+        onUnhover: handleTimelineUnhover
+    });
+    state.timelineDirty = false;
+}
+
+function handleTimelineHover({ monthKey, category, mode }) {
+    const bounds = monthRangeBoundsUtc(monthKey);
+    if (!bounds || !category || (mode !== 'source' && mode !== 'target')) return;
+
+    state.transientHighlight = {
+        filter: ['all',
+            ['==', ['get', mode], category],
+            ['>=', ['get', 'valid_from'], bounds.start],
+            ['<', ['get', 'valid_from'], bounds.end]
+        ]
+    };
+    applyMapHighlight();
+}
+
+function handleTimelineUnhover() {
+    if (!state.transientHighlight) return;
+    state.transientHighlight = null;
+    applyMapHighlight();
+}
+
 function initializeMap() {
     state.map = new maplibregl.Map({
         container: mapContainer,
@@ -379,9 +353,15 @@ function initializeMap() {
     state.map.on('load', () => {
         rebuildTransitionSource();
         addTransitionLayers();
-        fitMapToFeatures(state.transitionsGeojson.features);
+        if (appConfig.initialBounds) {
+            state.map.fitBounds(appConfig.initialBounds, {
+                padding: appConfig.boundsPadding,
+                duration: 0,
+                maxZoom: 12
+            });
+        }
         attachMapInteractions();
-        applySelectionToMap();
+        applyMapHighlight();
     });
 }
 
@@ -394,17 +374,12 @@ function rebuildTransitionSource() {
     removeLayerIfExists(state.map, appConfig.layerIds.selected);
     removeLayerIfExists(state.map, appConfig.layerIds.selectedOutline);
     removeLayerIfExists(state.map, appConfig.layerIds.base);
-    removeSourceIfExists(state.map, appConfig.sourceIds.transitionPoints);
     removeSourceIfExists(state.map, appConfig.sourceIds.transitions);
 
     addSourceIfMissing(state.map, appConfig.sourceIds.transitions, {
-        type: 'geojson',
-        data: state.transitionsGeojson
-    });
-
-    addSourceIfMissing(state.map, appConfig.sourceIds.transitionPoints, {
-        type: 'geojson',
-        data: state.transitionPointsGeojson
+        type: 'vector',
+        url: `pmtiles://${appConfig.transitionsPmtilesUrl}`,
+        promoteId: 'feature_id'
     });
 }
 
@@ -413,6 +388,7 @@ function addTransitionLayers() {
         id: appConfig.layerIds.base,
         type: 'line',
         source: appConfig.sourceIds.transitions,
+        'source-layer': appConfig.sourceLayers.lines,
         minzoom: appConfig.pointViewMaxZoom,
         paint: {
             'line-color': buildActiveColorExpression(),
@@ -425,6 +401,7 @@ function addTransitionLayers() {
         id: appConfig.layerIds.selectedOutline,
         type: 'line',
         source: appConfig.sourceIds.transitions,
+        'source-layer': appConfig.sourceLayers.lines,
         minzoom: appConfig.pointViewMaxZoom,
         filter: impossibleFilter(),
         paint: {
@@ -438,6 +415,7 @@ function addTransitionLayers() {
         id: appConfig.layerIds.selected,
         type: 'line',
         source: appConfig.sourceIds.transitions,
+        'source-layer': appConfig.sourceLayers.lines,
         minzoom: appConfig.pointViewMaxZoom,
         filter: impossibleFilter(),
         paint: {
@@ -451,6 +429,7 @@ function addTransitionLayers() {
         id: appConfig.layerIds.hover,
         type: 'line',
         source: appConfig.sourceIds.transitions,
+        'source-layer': appConfig.sourceLayers.lines,
         minzoom: appConfig.pointViewMaxZoom,
         filter: impossibleFilter(),
         paint: {
@@ -463,7 +442,8 @@ function addTransitionLayers() {
     addLayerIfMissing(state.map, {
         id: appConfig.layerIds.pointBase,
         type: 'circle',
-        source: appConfig.sourceIds.transitionPoints,
+        source: appConfig.sourceIds.transitions,
+        'source-layer': appConfig.sourceLayers.points,
         maxzoom: appConfig.pointViewMaxZoom,
         paint: {
             'circle-color': buildActiveColorExpression(),
@@ -477,7 +457,8 @@ function addTransitionLayers() {
     addLayerIfMissing(state.map, {
         id: appConfig.layerIds.pointSelectedOutline,
         type: 'circle',
-        source: appConfig.sourceIds.transitionPoints,
+        source: appConfig.sourceIds.transitions,
+        'source-layer': appConfig.sourceLayers.points,
         maxzoom: appConfig.pointViewMaxZoom,
         filter: impossibleFilter(),
         paint: {
@@ -490,7 +471,8 @@ function addTransitionLayers() {
     addLayerIfMissing(state.map, {
         id: appConfig.layerIds.pointSelected,
         type: 'circle',
-        source: appConfig.sourceIds.transitionPoints,
+        source: appConfig.sourceIds.transitions,
+        'source-layer': appConfig.sourceLayers.points,
         maxzoom: appConfig.pointViewMaxZoom,
         filter: impossibleFilter(),
         paint: {
@@ -503,7 +485,8 @@ function addTransitionLayers() {
     addLayerIfMissing(state.map, {
         id: appConfig.layerIds.pointHover,
         type: 'circle',
-        source: appConfig.sourceIds.transitionPoints,
+        source: appConfig.sourceIds.transitions,
+        'source-layer': appConfig.sourceLayers.points,
         maxzoom: appConfig.pointViewMaxZoom,
         filter: impossibleFilter(),
         paint: {
@@ -573,39 +556,48 @@ function clearHoverState() {
     hideHoverCard();
 }
 
-function updateSelection(nextSelection, options = {}) {
+function updateSelection(nextSelection) {
     if (!state.hasSeenSelection && nextSelection.type !== 'none') {
         state.hasSeenSelection = true;
         selectionHint?.classList.add('is-hidden');
     }
 
     state.selection = nextSelection;
+    state.transientHighlight = null;
     updateSelectionPanel();
     if (state.map?.isStyleLoaded()) {
-        applySelectionToMap();
-        if (options.fitSelection === true) {
-            fitMapToFeatures(getSelectedFeatures());
-        }
+        applyMapHighlight();
     }
 }
 
-function applySelectionToMap() {
+function applyMapHighlight() {
     if (!state.map?.isStyleLoaded()) return;
 
-    const hasActiveSelection = state.selection.type !== 'none';
-    const filter = buildSelectionFilter(state.selection);
+    const { filter, hasActive } = computeActiveHighlight();
     const activeColorExpression = buildActiveColorExpression();
 
     state.map.setPaintProperty(appConfig.layerIds.base, 'line-color', activeColorExpression);
-    state.map.setPaintProperty(appConfig.layerIds.base, 'line-opacity', hasActiveSelection ? 0.14 : 0.72);
+    state.map.setPaintProperty(appConfig.layerIds.base, 'line-opacity', hasActive ? 0.14 : 0.72);
     state.map.setPaintProperty(appConfig.layerIds.selected, 'line-color', activeColorExpression);
     state.map.setPaintProperty(appConfig.layerIds.pointBase, 'circle-color', activeColorExpression);
-    state.map.setPaintProperty(appConfig.layerIds.pointBase, 'circle-opacity', hasActiveSelection ? 0.2 : 0.8);
+    state.map.setPaintProperty(appConfig.layerIds.pointBase, 'circle-opacity', hasActive ? 0.2 : 0.8);
     state.map.setPaintProperty(appConfig.layerIds.pointSelected, 'circle-color', activeColorExpression);
-    state.map.setFilter(appConfig.layerIds.selectedOutline, hasActiveSelection ? filter : impossibleFilter());
-    state.map.setFilter(appConfig.layerIds.selected, hasActiveSelection ? filter : impossibleFilter());
-    state.map.setFilter(appConfig.layerIds.pointSelectedOutline, hasActiveSelection ? filter : impossibleFilter());
-    state.map.setFilter(appConfig.layerIds.pointSelected, hasActiveSelection ? filter : impossibleFilter());
+    state.map.setFilter(appConfig.layerIds.selectedOutline, hasActive ? filter : impossibleFilter());
+    state.map.setFilter(appConfig.layerIds.selected, hasActive ? filter : impossibleFilter());
+    state.map.setFilter(appConfig.layerIds.pointSelectedOutline, hasActive ? filter : impossibleFilter());
+    state.map.setFilter(appConfig.layerIds.pointSelected, hasActive ? filter : impossibleFilter());
+}
+
+function computeActiveHighlight() {
+    // Transientes Hover-Highlight (z.B. ueber das Time-Chart) hat Vorrang vor
+    // der dauerhaften Sankey-Selection.
+    if (state.transientHighlight?.filter) {
+        return { filter: state.transientHighlight.filter, hasActive: true };
+    }
+    if (state.selection.type !== 'none') {
+        return { filter: buildSelectionFilter(state.selection), hasActive: true };
+    }
+    return { filter: impossibleFilter(), hasActive: false };
 }
 
 function updateColorMode(nextMode) {
@@ -613,7 +605,11 @@ function updateColorMode(nextMode) {
     state.colorMode = nextMode;
     syncColorModeButtons();
     if (state.map?.isStyleLoaded()) {
-        applySelectionToMap();
+        applyMapHighlight();
+    }
+    state.timelineDirty = true;
+    if (state.activeView === 'timeline') {
+        ensureTimelineRendered();
     }
 }
 
@@ -626,33 +622,33 @@ function syncColorModeButtons() {
 }
 
 function updateSelectionPanel() {
-    const selectedFeatures = getSelectedFeatures();
-    const totalLength = selectedFeatures.reduce((sum, feature) => sum + Number(feature.properties?.length_km ?? 0), 0);
+    const selectedRows = getSelectedIndexRows();
+    const totalLength = selectedRows.reduce((sum, row) => sum + Number(row.length_km ?? 0), 0);
 
     if (state.selection.type === 'none') {
         selectionLabel.textContent = 'Keine';
-        selectionMeta.textContent = `${state.transitionsGeojson.features.length} Geometrien, gesamte Datenbasis`;
+        selectionMeta.textContent = `${state.transitionsIndex.length} Geometrien, gesamte Datenbasis`;
         return;
     }
 
     selectionLabel.textContent = formatSelectionLabel(state.selection);
-    selectionMeta.textContent = `${selectedFeatures.length} Geometrien, ${formatKilometers(totalLength)}`;
+    selectionMeta.textContent = `${selectedRows.length} Geometrien, ${formatKilometers(totalLength)}`;
 }
 
-function getSelectedFeatures() {
-    const features = state.transitionsGeojson.features;
+function getSelectedIndexRows() {
+    const rows = state.transitionsIndex;
     switch (state.selection.type) {
         case 'source':
-            return features.filter((feature) => feature.properties?.source === state.selection.source);
+            return rows.filter((row) => row.source === state.selection.source);
         case 'target':
-            return features.filter((feature) => feature.properties?.target === state.selection.target);
+            return rows.filter((row) => row.target === state.selection.target);
         case 'link':
-            return features.filter((feature) => (
-                feature.properties?.source === state.selection.source
-                && feature.properties?.target === state.selection.target
+            return rows.filter((row) => (
+                row.source === state.selection.source
+                && row.target === state.selection.target
             ));
         default:
-            return features;
+            return rows;
     }
 }
 
@@ -711,59 +707,6 @@ function buildCategoryColorExpression(propertyName, lookup) {
     }
     expression.push('#b9bfbc');
     return expression;
-}
-
-function fitMapToFeatures(features) {
-    const bounds = calculateBounds(features);
-    if (!bounds) return;
-    state.map.fitBounds(bounds, {
-        padding: appConfig.boundsPadding,
-        duration: 800,
-        maxZoom: features.length === 1 ? 14 : 12
-    });
-}
-
-function calculateBounds(features) {
-    let minLng = Infinity;
-    let minLat = Infinity;
-    let maxLng = -Infinity;
-    let maxLat = -Infinity;
-
-    for (const feature of features) {
-        visitCoordinates(feature.geometry, ([lng, lat]) => {
-            if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
-            minLng = Math.min(minLng, lng);
-            minLat = Math.min(minLat, lat);
-            maxLng = Math.max(maxLng, lng);
-            maxLat = Math.max(maxLat, lat);
-        });
-    }
-
-    if (![minLng, minLat, maxLng, maxLat].every(Number.isFinite)) {
-        return null;
-    }
-
-    return [[minLng, minLat], [maxLng, maxLat]];
-}
-
-function visitCoordinates(geometry, visitor) {
-    if (!geometry) return;
-
-    if (geometry.type === 'LineString' || geometry.type === 'MultiPoint') {
-        geometry.coordinates.forEach(visitor);
-        return;
-    }
-
-    if (geometry.type === 'MultiLineString' || geometry.type === 'Polygon') {
-        geometry.coordinates.forEach((part) => part.forEach(visitor));
-        return;
-    }
-
-    if (geometry.type === 'MultiPolygon') {
-        geometry.coordinates.forEach((polygon) => {
-            polygon.forEach((ring) => ring.forEach(visitor));
-        });
-    }
 }
 
 function showHoverCard(properties) {

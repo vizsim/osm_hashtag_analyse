@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>#missing-cw_mapillary-signs – Sankey + Karte</title>
     <link rel="icon" href="data:,">
-    <link href="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.css" rel="stylesheet">
+    <link href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" rel="stylesheet">
     <link rel="stylesheet" href="./style.css">
 </head>
 <body>
@@ -28,7 +28,7 @@
             <div class="status-card">
                 <div class="status-label">Aktive Auswahl</div>
                 <div id="selection-label" class="status-value">Keine</div>
-                <div id="selection-meta" class="status-meta">2620 Geometrien, gesamte Datenbasis</div>
+                <div id="selection-meta" class="status-meta">Lade Daten…</div>
                 <div class="status-toggle-row">
                     <span class="status-toggle-label">Einfärbung</span>
                     <div class="segmented-toggle" role="group" aria-label="Karten-Einfärbung">
@@ -38,7 +38,13 @@
                 </div>
             </div>
 
-            <div id="sankey" class="sankey-panel" aria-label="Sankey Diagramm"></div>
+            <div class="view-tabs" role="tablist" aria-label="Diagramm-Ansicht">
+                <button id="tab-sankey" class="view-tab is-active" role="tab" aria-selected="true" aria-controls="sankey" type="button">Sankey</button>
+                <button id="tab-timeline" class="view-tab" role="tab" aria-selected="false" aria-controls="timeline" type="button">Zeitverlauf</button>
+            </div>
+
+            <div id="sankey" class="chart-panel sankey-panel" role="tabpanel" aria-labelledby="tab-sankey" aria-label="Sankey Diagramm"></div>
+            <div id="timeline" class="chart-panel timeline-panel is-hidden" role="tabpanel" aria-labelledby="tab-timeline" aria-label="Zeitverlauf je Monat" hidden></div>
 
             <div class="credits-card">
                 <div class="legend-title">Credits</div>
@@ -102,7 +108,8 @@
     </div>
 
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-    <script src="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
     <script type="module" src="./script.js"></script>
 </body>
 </html>

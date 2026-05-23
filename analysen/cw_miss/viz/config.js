@@ -1,15 +1,23 @@
 export const appConfig = {
     title: '#missing-cw_mapillary-signs',
     sankeyDataUrl: './preprocessing/data/sankey.json',
-    transitionsDataUrl: './preprocessing/data/transitions_strict.geojson',
+    transitionsIndexUrl: './preprocessing/data/transitions_index.json',
+    transitionsPmtilesUrl: './preprocessing/data/transitions.pmtiles',
     mapStyle: 'https://tiles.openfreemap.org/styles/positron',
     fallbackCenter: [10.4, 51.2],
     fallbackZoom: 5.6,
+    // Statt einer bounds-Berechnung aus den Geometrien (die mit PMTiles
+    // clientseitig nicht mehr verfuegbar sind) verwenden wir feste Bounds.
+    // Werte stammen aus den PMTiles-Metadaten (Germany-Datensatz, leicht gepolstert).
+    initialBounds: [[5.8, 47.3], [15.1, 55.0]],
     pointViewMaxZoom: 9,
     boundsPadding: 48,
     sourceIds: {
-        transitions: 'transitions',
-        transitionPoints: 'transition-points'
+        transitions: 'transitions'
+    },
+    sourceLayers: {
+        lines: 'lines',
+        points: 'points'
     },
     layerIds: {
         base: 'transitions-base',
