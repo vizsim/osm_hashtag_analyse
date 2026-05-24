@@ -361,6 +361,7 @@ function handleTimelineClick(payload) {
 }
 
 function scheduleTransientSelection(selection) {
+    if (selection) markSelectionSeen();
     state.pendingTransient = selection;
     if (state.transientTimer !== null) return;
     state.transientTimer = setTimeout(() => {
@@ -372,6 +373,12 @@ function scheduleTransientSelection(selection) {
         state.transientHighlight = next ? { selection: next } : null;
         applyMapHighlight();
     }, HOVER_DEBOUNCE_MS);
+}
+
+function markSelectionSeen() {
+    if (state.hasSeenSelection) return;
+    state.hasSeenSelection = true;
+    selectionHint?.classList.add('is-hidden');
 }
 
 function cancelTransientSelection() {
@@ -601,10 +608,7 @@ function clearHoverState() {
 }
 
 function updateSelection(nextSelection) {
-    if (!state.hasSeenSelection && nextSelection.type !== 'none') {
-        state.hasSeenSelection = true;
-        selectionHint?.classList.add('is-hidden');
-    }
+    if (nextSelection.type !== 'none') markSelectionSeen();
 
     state.selection = nextSelection;
     cancelTransientSelection();

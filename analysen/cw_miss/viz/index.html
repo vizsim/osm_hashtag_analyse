@@ -20,27 +20,30 @@
             </div>
 
             <div id="selection-hint" class="intro-hint">
-                Auswahl und Fokus entstehen direkt über die linke oder rechte Seite des Sankey-Diagramms.
+                Hover für Vorschau, Klick zum Fixieren – in beiden Diagrammen.
             </div>
 
 
 
-            <div class="status-card">
-                <div class="status-label">Aktive Auswahl</div>
-                <div id="selection-label" class="status-value">Keine</div>
-                <div id="selection-meta" class="status-meta">Lade Daten…</div>
-                <div class="status-toggle-row">
-                    <span class="status-toggle-label">Einfärbung</span>
-                    <div class="segmented-toggle" role="group" aria-label="Karten-Einfärbung">
-                        <button id="color-mode-source" class="segmented-toggle__button" type="button" aria-pressed="false">Source</button>
-                        <button id="color-mode-target" class="segmented-toggle__button is-active" type="button" aria-pressed="true">Target</button>
+            <div class="status-card status-card--toolbar">
+                <div class="selection-summary">
+                    <span class="selection-summary__label">Auswahl</span>
+                    <span id="selection-label" class="selection-summary__value">Keine</span>
+                </div>
+                <div id="selection-meta" class="selection-summary__meta">Lade Daten…</div>
+                <div class="status-toolbar">
+                    <div class="view-tabs" role="tablist" aria-label="Diagramm-Ansicht">
+                        <button id="tab-sankey" class="view-tab is-active" role="tab" aria-selected="true" aria-controls="sankey" type="button">Sankey</button>
+                        <button id="tab-timeline" class="view-tab" role="tab" aria-selected="false" aria-controls="timeline" type="button">Zeit</button>
+                    </div>
+                    <div class="status-toolbar__group">
+                        <span class="status-toolbar__label">Färbung</span>
+                        <div class="segmented-toggle" role="group" aria-label="Karten-Einfärbung">
+                            <button id="color-mode-source" class="segmented-toggle__button" type="button" aria-pressed="false">Source</button>
+                            <button id="color-mode-target" class="segmented-toggle__button is-active" type="button" aria-pressed="true">Target</button>
+                        </div>
                     </div>
                 </div>
-            </div>
-
-            <div class="view-tabs" role="tablist" aria-label="Diagramm-Ansicht">
-                <button id="tab-sankey" class="view-tab is-active" role="tab" aria-selected="true" aria-controls="sankey" type="button">Sankey</button>
-                <button id="tab-timeline" class="view-tab" role="tab" aria-selected="false" aria-controls="timeline" type="button">Zeitverlauf</button>
             </div>
 
             <div id="sankey" class="chart-panel sankey-panel" role="tabpanel" aria-labelledby="tab-sankey" aria-label="Sankey Diagramm"></div>
@@ -55,13 +58,6 @@
                     mit Hilfe durch <a href="https://maproulette.org/" target="_blank" rel="noreferrer">MapRoulette</a>
                     und <a href="https://github.com/GIScience/ohsome-planet" target="_blank" rel="noreferrer">ohsome-planet</a>
                     als Grundlage für die Hashtag-Analyse.
-                </p>
-                <div class="legend-title legend-title--subsection">Datengrundlagen</div>
-                <p class="credits-copy credits-copy--sources">
-                    Datengrundlagen dieser Darstellung:
-                    <a href="./preprocessing/data/sankey.json" target="_blank" rel="noreferrer">Sankey JSON</a>
-                    und
-                    <a href="./preprocessing/data/transitions_strict.geojson" target="_blank" rel="noreferrer">Transitions GeoJSON</a>.
                 </p>
                 <p id="data-vintage" class="credits-copy credits-copy--sources-meta"></p>
             </div>
