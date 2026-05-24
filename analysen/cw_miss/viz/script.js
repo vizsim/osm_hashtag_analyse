@@ -2,6 +2,8 @@ import { appConfig, mapPaint, sourceColorPalette, specialCategoryColors, targetC
 import { addLayerIfMissing, addSourceIfMissing, hasLayer, removeLayerIfExists, removeSourceIfExists } from './map/mapSafeOps.js';
 import { renderTimeChart, monthRangeBoundsUtc } from './charts/timeChart.js';
 
+const HOVER_DEBOUNCE_MS = 90;
+
 const mapContainer = document.getElementById('map');
 const sankeyContainer = document.getElementById('sankey');
 const timelineContainer = document.getElementById('timeline');
@@ -31,7 +33,9 @@ const state = {
     sankeyModel: null,
     hoveredFeatureId: null,
     timelineDirty: true,
-    transientHighlight: null
+    transientHighlight: null,
+    pendingTransient: undefined,
+    transientTimer: null
 };
 
 init().catch((error) => {
@@ -238,45 +242,57 @@ function renderSankey() {
         scrollZoom: false
     });
 
+    const sankeyModel = { rows, sources, targets };
+
     sankeyContainer.on('plotly_click', (event) => {
-        handleSankeyClick(event, { rows, sources, targets });
+        const selection = extractSankeySelection(event, sankeyModel);
+        if (selection) updateSelection(selection);
+    });
+
+    sankeyContainer.on('plotly_hover', (event) => {
+        const selection = extractSankeySelection(event, sankeyModel);
+        scheduleTransientSelection(selection);
+    });
+
+    sankeyContainer.on('plotly_unhover', () => {
+        scheduleTransientSelection(null);
     });
 }
 
-function handleSankeyClick(event, sankeyModel) {
+function extractSankeySelection(event, sankeyModel) {
     const point = event?.points?.[0];
-    if (!point) return;
+    if (!point) return null;
 
     const pointIndex = point.pointNumber ?? point.pointIndex ?? point.index;
     if (typeof point.label === 'string' && Number.isInteger(pointIndex)) {
         if (pointIndex < sankeyModel.sources.length) {
-            updateSelection({
+            return {
                 type: 'source',
                 source: sankeyModel.sources[pointIndex],
                 target: null
-            });
-            return;
+            };
         }
 
         const targetIndex = pointIndex - sankeyModel.sources.length;
         if (targetIndex >= 0 && targetIndex < sankeyModel.targets.length) {
-            updateSelection({
+            return {
                 type: 'target',
                 source: null,
                 target: sankeyModel.targets[targetIndex]
-            });
-            return;
+            };
         }
     }
 
     if (Number.isInteger(pointIndex) && sankeyModel.rows[pointIndex]) {
         const row = sankeyModel.rows[pointIndex];
-        updateSelection({
+        return {
             type: 'link',
             source: row.source,
             target: row.target
-        });
+        };
     }
+
+    return null;
 }
 
 function setActiveView(view) {
@@ -314,29 +330,57 @@ function ensureTimelineRendered() {
         colorByTarget: state.colorByTarget,
         formatCategoryLabel,
         onHover: handleTimelineHover,
-        onUnhover: handleTimelineUnhover
+        onUnhover: handleTimelineUnhover,
+        onClick: handleTimelineClick
     });
     state.timelineDirty = false;
 }
 
-function handleTimelineHover({ monthKey, category, mode }) {
-    const bounds = monthRangeBoundsUtc(monthKey);
-    if (!bounds || !category || (mode !== 'source' && mode !== 'target')) return;
-
-    state.transientHighlight = {
-        filter: ['all',
-            ['==', ['get', mode], category],
-            ['>=', ['get', 'valid_from'], bounds.start],
-            ['<', ['get', 'valid_from'], bounds.end]
-        ]
+function selectionFromTimePoint({ monthKey, category, mode }) {
+    if (!category || !monthKey) return null;
+    if (mode !== 'source' && mode !== 'target') return null;
+    return {
+        type: mode,
+        source: mode === 'source' ? category : null,
+        target: mode === 'target' ? category : null,
+        month: monthKey
     };
-    applyMapHighlight();
+}
+
+function handleTimelineHover(payload) {
+    scheduleTransientSelection(selectionFromTimePoint(payload));
 }
 
 function handleTimelineUnhover() {
-    if (!state.transientHighlight) return;
+    scheduleTransientSelection(null);
+}
+
+function handleTimelineClick(payload) {
+    const selection = selectionFromTimePoint(payload);
+    if (selection) updateSelection(selection);
+}
+
+function scheduleTransientSelection(selection) {
+    state.pendingTransient = selection;
+    if (state.transientTimer !== null) return;
+    state.transientTimer = setTimeout(() => {
+        state.transientTimer = null;
+        const next = state.pendingTransient;
+        state.pendingTransient = undefined;
+        const previous = state.transientHighlight;
+        if (!next && !previous) return;
+        state.transientHighlight = next ? { selection: next } : null;
+        applyMapHighlight();
+    }, HOVER_DEBOUNCE_MS);
+}
+
+function cancelTransientSelection() {
+    if (state.transientTimer !== null) {
+        clearTimeout(state.transientTimer);
+        state.transientTimer = null;
+    }
+    state.pendingTransient = undefined;
     state.transientHighlight = null;
-    applyMapHighlight();
 }
 
 function initializeMap() {
@@ -563,7 +607,7 @@ function updateSelection(nextSelection) {
     }
 
     state.selection = nextSelection;
-    state.transientHighlight = null;
+    cancelTransientSelection();
     updateSelectionPanel();
     if (state.map?.isStyleLoaded()) {
         applyMapHighlight();
@@ -589,10 +633,13 @@ function applyMapHighlight() {
 }
 
 function computeActiveHighlight() {
-    // Transientes Hover-Highlight (z.B. ueber das Time-Chart) hat Vorrang vor
-    // der dauerhaften Sankey-Selection.
-    if (state.transientHighlight?.filter) {
-        return { filter: state.transientHighlight.filter, hasActive: true };
+    // Transientes Hover-Highlight (Sankey- oder Time-Chart-Hover) hat Vorrang
+    // vor der dauerhaften Klick-Selection.
+    if (state.transientHighlight?.selection) {
+        return {
+            filter: buildSelectionFilter(state.transientHighlight.selection),
+            hasActive: true
+        };
     }
     if (state.selection.type !== 'none') {
         return { filter: buildSelectionFilter(state.selection), hasActive: true };
@@ -636,16 +683,26 @@ function updateSelectionPanel() {
 }
 
 function getSelectedIndexRows() {
+    const selection = state.selection;
+    const bounds = selection.month ? monthRangeBoundsUtc(selection.month) : null;
+    const matchesMonth = (row) => {
+        if (!bounds) return true;
+        const value = row?.valid_from;
+        if (typeof value !== 'string') return false;
+        return value >= bounds.start && value < bounds.end;
+    };
+
     const rows = state.transitionsIndex;
-    switch (state.selection.type) {
+    switch (selection.type) {
         case 'source':
-            return rows.filter((row) => row.source === state.selection.source);
+            return rows.filter((row) => row.source === selection.source && matchesMonth(row));
         case 'target':
-            return rows.filter((row) => row.target === state.selection.target);
+            return rows.filter((row) => row.target === selection.target && matchesMonth(row));
         case 'link':
             return rows.filter((row) => (
-                row.source === state.selection.source
-                && row.target === state.selection.target
+                row.source === selection.source
+                && row.target === selection.target
+                && matchesMonth(row)
             ));
         default:
             return rows;
@@ -653,6 +710,12 @@ function getSelectedIndexRows() {
 }
 
 function formatSelectionLabel(selection) {
+    const base = formatSelectionBaseLabel(selection);
+    if (!selection.month) return base;
+    return `${base} · ${formatMonthLabelDe(selection.month)}`;
+}
+
+function formatSelectionBaseLabel(selection) {
     if (selection.type === 'source') {
         return `Source: ${formatCategoryLabel(selection.source)}`;
     }
@@ -665,7 +728,26 @@ function formatSelectionLabel(selection) {
     return 'Keine';
 }
 
+function formatMonthLabelDe(monthKey) {
+    const match = /^(\d{4})-(\d{2})$/.exec(monthKey ?? '');
+    if (!match) return String(monthKey ?? '');
+    const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, 1));
+    return date.toLocaleDateString('de-DE', { year: 'numeric', month: 'short' });
+}
+
 function buildSelectionFilter(selection) {
+    const base = buildSelectionBaseFilter(selection);
+    if (!selection.month) return base;
+    const bounds = monthRangeBoundsUtc(selection.month);
+    if (!bounds) return base;
+    return ['all',
+        base,
+        ['>=', ['get', 'valid_from'], bounds.start],
+        ['<', ['get', 'valid_from'], bounds.end]
+    ];
+}
+
+function buildSelectionBaseFilter(selection) {
     if (selection.type === 'source') {
         return ['==', ['get', 'source'], selection.source];
     }

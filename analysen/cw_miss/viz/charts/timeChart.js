@@ -97,26 +97,35 @@ export function renderTimeChart(container, indexRows, options) {
     if (typeof container.removeAllListeners === 'function') {
         container.removeAllListeners('plotly_hover');
         container.removeAllListeners('plotly_unhover');
+        container.removeAllListeners('plotly_click');
     }
+
+    const extractPointPayload = (event) => {
+        const point = event?.points?.[0];
+        if (!point) return null;
+        const meta = point.data?.meta;
+        const monthKey = typeof point.customdata === 'string' ? point.customdata : null;
+        if (!meta || !monthKey) return null;
+        return { monthKey, category: meta.category, mode: meta.mode };
+    };
 
     if (typeof options.onHover === 'function') {
         container.on('plotly_hover', (event) => {
-            const point = event?.points?.[0];
-            if (!point) return;
-            const meta = point.data?.meta;
-            const monthKey = typeof point.customdata === 'string' ? point.customdata : null;
-            if (!meta || !monthKey) return;
-            options.onHover({
-                monthKey,
-                category: meta.category,
-                mode: meta.mode
-            });
+            const payload = extractPointPayload(event);
+            if (payload) options.onHover(payload);
         });
     }
 
     if (typeof options.onUnhover === 'function') {
         container.on('plotly_unhover', () => {
             options.onUnhover();
+        });
+    }
+
+    if (typeof options.onClick === 'function') {
+        container.on('plotly_click', (event) => {
+            const payload = extractPointPayload(event);
+            if (payload) options.onClick(payload);
         });
     }
 }
