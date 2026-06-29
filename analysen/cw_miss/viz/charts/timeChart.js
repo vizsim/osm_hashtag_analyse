@@ -13,12 +13,16 @@ export function renderTimeChart(container, indexRows, options) {
     const colorLookup = colorMode === 'source' ? options.colorBySource : options.colorByTarget;
     const formatLabel = options.formatCategoryLabel ?? ((value) => String(value));
 
-    const { months, categories, totalsByCategory, valuesByCategoryByMonth } = aggregate(indexRows, colorMode);
+    const { months: dataMonths, categories, totalsByCategory, valuesByCategoryByMonth } = aggregate(indexRows, colorMode);
 
-    if (months.length === 0 || categories.length === 0) {
+    if (dataMonths.length === 0 || categories.length === 0) {
         container.innerHTML = '<div class="timeline-empty">Keine Daten verfuegbar.</div>';
         return;
     }
+
+    // Lueckenlose Monatsachse vom ersten bis zum letzten Datenmonat: Monate ohne
+    // Beitraege erscheinen als leere (0-)Balken statt einfach zu verschwinden.
+    const months = enumerateMonths(dataMonths[0], dataMonths[dataMonths.length - 1]);
 
     // y-Maximum mode-unabhaengig fixieren, damit die Skala beim
     // Source/Target-Toggle stabil bleibt. Pro Zeile traegt length_km zu genau
@@ -143,6 +147,32 @@ export function monthRangeBoundsUtc(monthKey) {
         start: start.toISOString().replace(/\.\d+Z$/, 'Z'),
         end: end.toISOString().replace(/\.\d+Z$/, 'Z')
     };
+}
+
+// Liefert alle YYYY-MM-Keys von startKey bis endKey (inklusive), lueckenlos.
+function enumerateMonths(startKey, endKey) {
+    const parse = (key) => {
+        const [year, month] = String(key).split('-').map(Number);
+        return { year, month };
+    };
+    const start = parse(startKey);
+    const end = parse(endKey);
+    if (!start.year || !start.month || !end.year || !end.month) {
+        return startKey === endKey ? [startKey] : [startKey, endKey];
+    }
+
+    const months = [];
+    let year = start.year;
+    let month = start.month;
+    while (year < end.year || (year === end.year && month <= end.month)) {
+        months.push(`${year}-${String(month).padStart(2, '0')}`);
+        month += 1;
+        if (month > 12) {
+            month = 1;
+            year += 1;
+        }
+    }
+    return months;
 }
 
 function computeStableYMax(rows) {

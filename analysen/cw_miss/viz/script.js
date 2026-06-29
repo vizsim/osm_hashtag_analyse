@@ -19,9 +19,12 @@ const hoverCopy = document.getElementById('hover-copy');
 const colorModeTargetButton = document.getElementById('color-mode-target');
 const colorModeSourceButton = document.getElementById('color-mode-source');
 const dataVintage = document.getElementById('data-vintage');
+const campaignSwitch = document.getElementById('campaign-switch');
+const panelTitle = document.querySelector('.panel-header h1');
 
 const state = {
     map: null,
+    campaign: null,
     sankeyRows: [],
     transitionsIndex: [],
     selection: { type: 'none', source: null, target: null },
@@ -54,10 +57,20 @@ async function init() {
 
     state.sankeyRows = sankeyRows;
     state.transitionsIndex = transitionsIndex;
-    state.colorBySource = createCategoryColorLookup(getUniqueValues(sankeyRows, 'source'), sourceColorPalette, specialCategoryColors);
-    state.colorByTarget = createCategoryColorLookup(getUniqueValues(sankeyRows, 'target'), targetColorPalette);
-    state.sankeyModel = buildSankeyModel(sankeyRows);
+    state.campaign = appConfig.defaultCampaign ?? appConfig.campaigns?.[0]?.id ?? null;
+    // Farb-Lookups bewusst ueber ALLE Kampagnen und nach Gesamtwert sortiert:
+    // (1) bleibt beim Umschalten stabil, (2) reproduziert die alte Single-Campaign-
+    // Einfaerbung, da die Farbe sonst von der Zeilenreihenfolge in sankey.json
+    // abhinge (die jetzt zuerst nach campaign sortiert ist).
+    const rowsByValueDesc = [...sankeyRows].sort(
+        (left, right) => Number(right.value ?? 0) - Number(left.value ?? 0)
+    );
+    state.colorBySource = createCategoryColorLookup(getUniqueValues(rowsByValueDesc, 'source'), sourceColorPalette, specialCategoryColors);
+    state.colorByTarget = createCategoryColorLookup(getUniqueValues(rowsByValueDesc, 'target'), targetColorPalette);
+    state.sankeyModel = buildSankeyModel(activeSankeyRows());
 
+    buildCampaignSwitch();
+    updatePanelTitle();
     updateDataVintage();
 
     renderSankey();
@@ -86,6 +99,81 @@ async function init() {
     });
 }
 
+function activeSankeyRows() {
+    return state.sankeyRows.filter((row) => row.campaign === state.campaign);
+}
+
+function activeIndexRows() {
+    return state.transitionsIndex.filter((row) => row.campaign === state.campaign);
+}
+
+function campaignFilter() {
+    return ['==', ['get', 'campaign'], state.campaign];
+}
+
+function buildCampaignSwitch() {
+    if (!campaignSwitch) return;
+    const campaigns = appConfig.campaigns ?? [];
+    campaignSwitch.innerHTML = '';
+    for (const campaign of campaigns) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'segmented-toggle__button';
+        button.dataset.campaign = campaign.id;
+        button.textContent = campaign.label ?? campaign.id;
+        const isActive = campaign.id === state.campaign;
+        button.classList.toggle('is-active', isActive);
+        button.setAttribute('aria-pressed', String(isActive));
+        button.addEventListener('click', () => setActiveCampaign(campaign.id));
+        campaignSwitch.appendChild(button);
+    }
+}
+
+function syncCampaignButtons() {
+    if (!campaignSwitch) return;
+    for (const button of campaignSwitch.querySelectorAll('button')) {
+        const isActive = button.dataset.campaign === state.campaign;
+        button.classList.toggle('is-active', isActive);
+        button.setAttribute('aria-pressed', String(isActive));
+    }
+}
+
+function updatePanelTitle() {
+    const campaign = (appConfig.campaigns ?? []).find((item) => item.id === state.campaign);
+    const hashtag = campaign?.hashtag ?? appConfig.title ?? '';
+    if (panelTitle) panelTitle.textContent = hashtag;
+    document.title = `${hashtag} – Sankey + Karte`;
+}
+
+function setActiveCampaign(id) {
+    if (state.campaign === id) return;
+    state.campaign = id;
+    syncCampaignButtons();
+    updatePanelTitle();
+
+    // Auswahl/Hover zuruecksetzen: Kategorien-Auspraegungen unterscheiden sich je Kampagne.
+    clearHoverState();
+    state.selection = { type: 'none', source: null, target: null };
+    cancelTransientSelection();
+
+    state.sankeyModel = buildSankeyModel(activeSankeyRows());
+    renderSankey();
+
+    updateSelectionPanel();
+    // Datenstand ist global -> kein Update beim Kampagnenwechsel noetig.
+
+    if (state.map?.isStyleLoaded()) {
+        state.map.setFilter(appConfig.layerIds.base, campaignFilter());
+        state.map.setFilter(appConfig.layerIds.pointBase, campaignFilter());
+        applyMapHighlight();
+    }
+
+    state.timelineDirty = true;
+    if (state.activeView === 'timeline') {
+        ensureTimelineRendered();
+    }
+}
+
 function registerPmtilesProtocol() {
     if (typeof pmtiles === 'undefined' || typeof maplibregl === 'undefined') return;
     if (registerPmtilesProtocol.done) return;
@@ -105,6 +193,8 @@ async function fetchJson(url) {
 function updateDataVintage() {
     if (!dataVintage) return;
 
+    // Datenstand = Frische des GESAMTEN Datensatzes (juengste Bearbeitung ueber
+    // alle Kampagnen), nicht der aktiven Kampagne -> bleibt beim Umschalten stabil.
     const latestDate = getLatestValidFrom(state.transitionsIndex);
     if (!latestDate) {
         dataVintage.textContent = '';
@@ -324,7 +414,7 @@ function setActiveView(view) {
 
 function ensureTimelineRendered() {
     if (!timelineContainer) return;
-    renderTimeChart(timelineContainer, state.transitionsIndex, {
+    renderTimeChart(timelineContainer, activeIndexRows(), {
         colorMode: state.colorMode,
         colorBySource: state.colorBySource,
         colorByTarget: state.colorByTarget,
@@ -441,6 +531,7 @@ function addTransitionLayers() {
         source: appConfig.sourceIds.transitions,
         'source-layer': appConfig.sourceLayers.lines,
         minzoom: appConfig.pointViewMaxZoom,
+        filter: campaignFilter(),
         paint: {
             'line-color': buildActiveColorExpression(),
             'line-width': mapPaint.baseWidth,
@@ -496,6 +587,7 @@ function addTransitionLayers() {
         source: appConfig.sourceIds.transitions,
         'source-layer': appConfig.sourceLayers.points,
         maxzoom: appConfig.pointViewMaxZoom,
+        filter: campaignFilter(),
         paint: {
             'circle-color': buildActiveColorExpression(),
             'circle-radius': mapPaint.pointRadius,
@@ -623,6 +715,9 @@ function applyMapHighlight() {
 
     const { filter, hasActive } = computeActiveHighlight();
     const activeColorExpression = buildActiveColorExpression();
+    // Selektion laeuft ueber source/target und trifft beide Kampagnen -> auf die
+    // aktive Kampagne eingrenzen.
+    const selectionFilter = hasActive ? ['all', campaignFilter(), filter] : impossibleFilter();
 
     state.map.setPaintProperty(appConfig.layerIds.base, 'line-color', activeColorExpression);
     state.map.setPaintProperty(appConfig.layerIds.base, 'line-opacity', hasActive ? 0.14 : 0.72);
@@ -630,10 +725,10 @@ function applyMapHighlight() {
     state.map.setPaintProperty(appConfig.layerIds.pointBase, 'circle-color', activeColorExpression);
     state.map.setPaintProperty(appConfig.layerIds.pointBase, 'circle-opacity', hasActive ? 0.2 : 0.8);
     state.map.setPaintProperty(appConfig.layerIds.pointSelected, 'circle-color', activeColorExpression);
-    state.map.setFilter(appConfig.layerIds.selectedOutline, hasActive ? filter : impossibleFilter());
-    state.map.setFilter(appConfig.layerIds.selected, hasActive ? filter : impossibleFilter());
-    state.map.setFilter(appConfig.layerIds.pointSelectedOutline, hasActive ? filter : impossibleFilter());
-    state.map.setFilter(appConfig.layerIds.pointSelected, hasActive ? filter : impossibleFilter());
+    state.map.setFilter(appConfig.layerIds.selectedOutline, selectionFilter);
+    state.map.setFilter(appConfig.layerIds.selected, selectionFilter);
+    state.map.setFilter(appConfig.layerIds.pointSelectedOutline, selectionFilter);
+    state.map.setFilter(appConfig.layerIds.pointSelected, selectionFilter);
 }
 
 function computeActiveHighlight() {
@@ -678,7 +773,7 @@ function updateSelectionPanel() {
 
     if (state.selection.type === 'none') {
         selectionLabel.textContent = 'Keine';
-        selectionMeta.textContent = `${state.transitionsIndex.length} Geometrien, gesamte Datenbasis`;
+        selectionMeta.textContent = `${activeIndexRows().length} Geometrien, gesamte Datenbasis`;
         return;
     }
 
@@ -696,7 +791,7 @@ function getSelectedIndexRows() {
         return value >= bounds.start && value < bounds.end;
     };
 
-    const rows = state.transitionsIndex;
+    const rows = activeIndexRows();
     switch (selection.type) {
         case 'source':
             return rows.filter((row) => row.source === selection.source && matchesMonth(row));

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>#missing-cw_mapillary-signs – Sankey + Karte</title>
+    <title>missing-cw mapillary – Sankey + Karte</title>
     <link rel="icon" href="data:,">
     <link href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" rel="stylesheet">
     <link rel="stylesheet" href="./style.css">
@@ -17,6 +17,11 @@
                     <h1>#missing-cw_mapillary-signs</h1>
                 </div>
                 <button id="reset-selection" class="ghost-button" type="button">Reset</button>
+            </div>
+
+            <div class="campaign-switch__wrap">
+                <span class="campaign-switch__label">Kampagne</span>
+                <div id="campaign-switch" class="segmented-toggle campaign-switch" role="group" aria-label="Kampagne wählen"></div>
             </div>
 
             <div id="selection-hint" class="intro-hint">

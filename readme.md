@@ -13,7 +13,7 @@ Diese Anleitung beschreibt den Workflow, um mit ohsome-planet eine Datenbank aus
 3. [Changeset-Datenbank einrichten und befüllen](#3-changeset-datenbank-einrichten-und-befüllen)
 4. [Kombination von OSM-History und Changesets](#4-kombination-von-osm-history-und-changesets-ohsome-planet-inkl-replikation)
 5. [Ergebnis](#5-ergebnis)
-* [Troubleshooting & Tipps](#-troubleshooting--tipps)
+* [Troubleshooting & Tipps](troubleshooting.md)
 * [Weiterführende Links](#-weiterführende-links)
 
 ---
@@ -200,7 +200,7 @@ Im angegebenen Output-Verzeichnis (`--data`) liegen anschließend Parquet-Dateie
 
 Diese Parquet-Dateien werden anschließend im `analysen`-Ordner für weitere Datenanalysen und Visualisierungen genutzt.
 
----
+> 💡 Bekannte Probleme & Workarounds (z. B. `NumberFormatException` bei der Replikation) stehen in der separaten [troubleshooting.md](troubleshooting.md).
 
 ---
 

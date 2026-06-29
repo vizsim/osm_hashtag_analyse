@@ -111,6 +111,24 @@ body {
     font-size: 14px;
 }
 
+.campaign-switch__wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.campaign-switch__label {
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.campaign-switch {
+    flex-wrap: wrap;
+}
+
 .intro-hint {
     padding: 10px 12px;
     border: 1px dashed rgba(53, 45, 35, 0.18);

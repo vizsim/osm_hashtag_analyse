@@ -1,5 +1,12 @@
 export const appConfig = {
     title: '#missing-cw_mapillary-signs',
+    // Kampagnen (Hashtags) werden im selben Datensatz ueber die Property
+    // `campaign` getrennt und im Frontend per Umschalter gefiltert.
+    campaigns: [
+        { id: 'mapillary-signs',   label: 'Signs',   hashtag: '#missing-cw_mapillary-signs' },
+        { id: 'mapillary-feature', label: 'Feature', hashtag: '#missing-cw_mapillary-feature' }
+    ],
+    defaultCampaign: 'mapillary-signs',
     sankeyDataUrl: './preprocessing/data/sankey.json',
     transitionsIndexUrl: './preprocessing/data/transitions_index.json',
     transitionsPmtilesUrl: './preprocessing/data/transitions.pmtiles',
@@ -38,7 +45,8 @@ export const targetColorPalette = [
     '#678d3f',
     '#9d7a2f',
     '#b86a45',
-    '#7766a8'
+    '#7766a8',
+    '#557a95'
 ];
 
 export const sourceColorPalette = [
