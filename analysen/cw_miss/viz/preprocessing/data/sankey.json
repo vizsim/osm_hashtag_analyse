@@ -3,7 +3,7 @@
     "campaign":"mapillary-feature",
     "source":"hw=secondary_other",
     "target":"cw=lane",
-    "value":5.4
+    "value":7.0
   },
   {
     "campaign":"mapillary-feature",
@@ -141,61 +141,61 @@
     "campaign":"mapillary-signs",
     "source":"Added",
     "target":"hw=path_bicycle=designated",
-    "value":226.0
+    "value":245.4
   },
   {
     "campaign":"mapillary-signs",
     "source":"hw=path_other",
     "target":"hw=path_bicycle=designated",
-    "value":88.6
+    "value":99.3
   },
   {
     "campaign":"mapillary-signs",
     "source":"hw=track_other",
     "target":"hw=path_bicycle=designated",
-    "value":38.4
+    "value":38.8
   },
   {
     "campaign":"mapillary-signs",
     "source":"hw=cycleway",
     "target":"hw=path_bicycle=designated",
-    "value":37.0
+    "value":37.7
   },
   {
     "campaign":"mapillary-signs",
     "source":"hw=track_other",
     "target":"hw=track_bicycle=designated",
-    "value":34.5
+    "value":37.6
   },
   {
     "campaign":"mapillary-signs",
     "source":"hw=secondary_other",
     "target":"cw=track",
-    "value":29.8
+    "value":30.6
   },
   {
     "campaign":"mapillary-signs",
     "source":"hw=footway_other",
     "target":"hw=path_bicycle=designated",
-    "value":27.5
+    "value":27.6
   },
   {
     "campaign":"mapillary-signs",
     "source":"hw=tertiary_other",
     "target":"cw=track",
-    "value":22.6
+    "value":22.7
   },
   {
     "campaign":"mapillary-signs",
     "source":"hw=footway_bicycle=yes",
     "target":"hw=path_bicycle=designated",
-    "value":19.8
+    "value":21.7
   },
   {
     "campaign":"mapillary-signs",
     "source":"Added",
     "target":"hw=footway_bicycle=yes",
-    "value":16.1
+    "value":16.2
   },
   {
     "campaign":"mapillary-signs",
@@ -207,13 +207,19 @@
     "campaign":"mapillary-signs",
     "source":"hw=track_bicycle=designated",
     "target":"hw=path_bicycle=designated",
-    "value":9.3
+    "value":10.1
   },
   {
     "campaign":"mapillary-signs",
     "source":"hw=footway_other",
     "target":"hw=footway_bicycle=yes",
     "value":8.9
+  },
+  {
+    "campaign":"mapillary-signs",
+    "source":"hw=residential_other",
+    "target":"cw=lane",
+    "value":7.1
   },
   {
     "campaign":"mapillary-signs",
@@ -231,7 +237,7 @@
     "campaign":"mapillary-signs",
     "source":"hw=service_other",
     "target":"hw=path_bicycle=designated",
-    "value":6.0
+    "value":6.1
   },
   {
     "campaign":"mapillary-signs",
@@ -241,15 +247,9 @@
   },
   {
     "campaign":"mapillary-signs",
-    "source":"hw=residential_other",
-    "target":"cw=lane",
-    "value":5.7
-  },
-  {
-    "campaign":"mapillary-signs",
     "source":"Added",
     "target":"hw=cycleway",
-    "value":5.6
+    "value":5.8
   },
   {
     "campaign":"mapillary-signs",
@@ -399,6 +399,12 @@
     "campaign":"mapillary-signs",
     "source":"hw=cycleway",
     "target":"hw=track_bicycle=designated",
+    "value":0.2
+  },
+  {
+    "campaign":"mapillary-signs",
+    "source":"cw=track",
+    "target":"hw=path_bicycle=designated",
     "value":0.2
   },
   {
