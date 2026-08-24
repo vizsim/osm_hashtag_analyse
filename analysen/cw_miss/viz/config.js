@@ -1,3 +1,16 @@
+// Das PMTiles-Archiv wird per HTTP-Range gelesen und darf deshalb nicht von
+// GitHub Pages kommen: Pages gzippt application/octet-stream on the fly und
+// legt den Range auf die komprimierte Fassung. Firefox < 148 fordert bei
+// Range-Requests kein `Accept-Encoding: identity` an (Mozilla-Bug 1983387) und
+// scheitert dort am Teil-gzip-Stream. raw.githubusercontent.com transformiert
+// nicht. Lokal bleibt der relative Pfad, damit frisch erzeugte Kacheln ohne
+// Push testbar sind.
+const localHostnames = ['localhost', '127.0.0.1', '::1', ''];
+const isLocalDev = typeof window !== 'undefined' && localHostnames.includes(window.location.hostname);
+const pmtilesUrl = isLocalDev
+    ? './preprocessing/data/transitions.pmtiles'
+    : 'https://raw.githubusercontent.com/vizsim/osm_hashtag_analyse/main/analysen/cw_miss/viz/preprocessing/data/transitions.pmtiles';
+
 export const appConfig = {
     title: '#missing-cw_mapillary-signs',
     // Kampagnen (Hashtags) werden im selben Datensatz ueber die Property
@@ -9,7 +22,7 @@ export const appConfig = {
     defaultCampaign: 'mapillary-signs',
     sankeyDataUrl: './preprocessing/data/sankey.json',
     transitionsIndexUrl: './preprocessing/data/transitions_index.json',
-    transitionsPmtilesUrl: './preprocessing/data/transitions.pmtiles',
+    transitionsPmtilesUrl: pmtilesUrl,
     mapStyle: 'https://tiles.openfreemap.org/styles/positron',
     fallbackCenter: [10.4, 51.2],
     fallbackZoom: 5.6,

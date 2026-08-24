@@ -9,10 +9,19 @@ Live-Version:
 
 ## Datenbasis
 
-Die Ansicht verwendet aktuell zwei vorbereitete Dateien aus dem Preprocessing:
+Die Ansicht verwendet drei vorbereitete Dateien aus dem Preprocessing:
 
 - `./preprocessing/data/sankey.json`
-- `./preprocessing/data/transitions_strict.geojson`
+- `./preprocessing/data/transitions_index.json`
+- `./preprocessing/data/transitions.pmtiles` (erzeugt via `./preprocessing/generate_pmtiles.sh`)
+
+Das PMTiles-Archiv wird nicht von GitHub Pages ausgeliefert, sondern von
+`raw.githubusercontent.com` (siehe `config.js`). Pages komprimiert
+`application/octet-stream` on the fly und beantwortet Range-Requests mit einem
+Ausschnitt der *komprimierten* Datei; Browser, die bei Range-Requests kein
+`Accept-Encoding: identity` senden (Firefox vor 148, Mozilla-Bug 1983387),
+bekommen dadurch unbrauchbare Bytes. Auf `localhost` wird weiterhin die lokale
+Datei genutzt.
 
 
 ## Interaktion
@@ -26,4 +35,4 @@ Die Ansicht verwendet aktuell zwei vorbereitete Dateien aus dem Preprocessing:
 
 ## Technischer Stand
 
-Die aktuelle Version nutzt GeoJSON direkt und ist fuer den aktuellen Datenumfang ausreichend leichtgewichtig. Fuer groessere Datenmengen kann spaeter auf PMTiles oder Vektor-Tiles umgestellt werden, ohne die fachliche Datenbasis zu aendern.
+Die Geometrien liegen als PMTiles vor und werden per Byte-Range direkt im Browser gelesen. Der Host muss dafuer Byte-Serving ohne Kompressions-Transformation beherrschen — jsDelivr scheidet damit aus, es liefert brotli-kodierte Ranges.
